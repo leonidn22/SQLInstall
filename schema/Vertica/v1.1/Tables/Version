@@ -1,0 +1,9 @@
+create schema IF NOT EXISTS install ;
+
+CREATE TABLE install.Version
+(
+    Version varchar(255) NOT NULL,
+    VersionAsInt int NOT NULL,
+    InstallTime timestamp default current_timestamp NOT NULL,
+    Description varchar(1024) NOT NULL
+);
