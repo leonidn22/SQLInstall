@@ -244,11 +244,11 @@ def arg_validation():
     return args
 
 if __name__ == '__main__':
-#ToDo  create default_schema if not exists Done
 
-#ToDo  create table version   Done
+
+
 #ToDo  The folders will be as in TFS
-#ToDo
+
 
     # task parameters
     # args=arg_validation()
