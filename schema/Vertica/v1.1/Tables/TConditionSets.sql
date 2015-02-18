@@ -1,4 +1,7 @@
-CREATE TABLE public.TConditionSets
+
+CREATE
+
+TABLE public.TConditionSets
 (
     RunId int NOT NULL,
     ConditionSetID int NOT NULL,
@@ -7,7 +10,6 @@ CREATE TABLE public.TConditionSets
     FloatValue float,
     MeasuringUnit int
 );
-
 CREATE PROJECTION public.TConditionSets
 (
  RunId ENCODING DELTAVAL,

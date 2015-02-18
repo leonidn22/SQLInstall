@@ -41,7 +41,7 @@ class Vertica(object):
         except Exception, e:
             logging.error('SQL EXCEPTION %s', e)
             logging.error(query)
-            print ('SQL EXCEPTION %s', e)
+            #print ('SQL EXCEPTION %s', e)
             #mailANDsql('Exception during execute sqls<br><br>%s<br><br >SQL: %s' %(e,query),False)
             return -1, str(e).replace("'", '')
 
@@ -56,7 +56,6 @@ class Vertica(object):
 
     def commit(self):
         self.cn.commit()
-        logging.info("VERTICA: COMMIT")
 
     def close(self):
         self.cn.close()
@@ -73,13 +72,30 @@ class Vertica(object):
         return self.execute("select current_schema()")
 
     def set_default_schema(self, schema_name):
+        if not self.has_schema(schema_name):
+            self.create_schema(schema_name)
         self.cursor.execute("SET search_path TO %s" % schema_name)
+
+
+    def create_schema(self, schema_name):
+        self.cursor.execute("create schema IF NOT EXISTS %s" % schema_name)
+
+
+    def has_schema(self, schema):
+        query = ("SELECT EXISTS (SELECT schema_name FROM v_catalog.schemata "
+                 "WHERE schema_name='%s')") % (schema)
+        rs = self.execute(query)
+        return bool(rs[1][0][0])
+
 
     def has_table(self, table_name, schema=None):
         if schema is None:
             schema = self.get_default_schema_name()[1][0][0]
+        if table_name == schema:
+            schema = self.get_default_schema_name()[1][0][0]
         if table_name == 'Version':
             schema = 'install'
+
         query = ("SELECT EXISTS ("
                  "SELECT table_name FROM v_catalog.all_tables "
                  "WHERE schema_name='%s' AND "
@@ -92,8 +108,8 @@ class Vertica(object):
     def has_projection(self, projection_name, schema=None):
         if schema is None:
             schema = self.get_default_schema_name()[1][0][0]
-        # if table_name == 'Version':
-        #     schema = 'install'
+        if projection_name == schema:
+            schema = self.get_default_schema_name()[1][0][0]
         query = ("SELECT EXISTS ("
                  "SELECT projection_name FROM v_catalog.projections "
                  "WHERE projection_schema ='%s' AND "

@@ -1,6 +1,6 @@
 
 
-CREATE TABLE public.TTestResults
+CREATE TABLE TTestResults
 (
     RunID int NOT NULL,
     DieTestOrder int NOT NULL,
@@ -25,7 +25,7 @@ PARTITION BY (date_trunc('DAY', TTestResults.LoadDate));
 
 
 
-CREATE PROJECTION public.TTestResults_SP_V0
+CREATE PROJECTION TTestResults_SP_V0
 (
  RunID ENCODING RLE,
  DieTestOrder ENCODING DELTAVAL,
@@ -65,7 +65,7 @@ AS
         TTestResults.Flags,
         TTestResults.ExecutionOrder,
         TTestResults.RepeatitionOrder
- FROM public.TTestResults
+ FROM TTestResults
  ORDER BY TTestResults.RunID,
           TTestResults.TestType,
           TTestResults.TestID,

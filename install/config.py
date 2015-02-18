@@ -1,23 +1,21 @@
 from os.path import join as path_join
 
+DSN = "vertica"
 version = '1.4'
 description = 'The  version'
+# only rerun the current version
 is_rerun_the_installed_version = True
-version_as_int = 11
 
-default_schema = 'public'
+# default_schema will be created if not exists
+default_schema = 'optimal2'
 root = '/home/dbadmin/optinstall'
+schema_dir = '/home/dbadmin/optinstall/schema/Vertica'
 
-DSN = "vertica"
 log_file = path_join(root, 'logs/install.log')
 log_file = ''
 
-schema_dir = '/home/dbadmin/optinstall/schema/Vertica'
-tables_dir = path_join(root, 'schema/Vertica/Tables')
-misc_dir = path_join(root, 'schema/Vertica/Misc')
+stop_after_first_exception = True
 
 
 
-version_sql = """
-            insert into install.Version
-            """
+#version_as_int = 11
