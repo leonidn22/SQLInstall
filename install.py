@@ -1,15 +1,10 @@
 #!/opt/vertica/oss/python/bin/python
 
-import config
-import logging
 import argparse
 import re
 from os.path import join as path_join
 import fnmatch
 from stat import *
-import sys
-import os
-
 
 from Vertica import *
 
@@ -51,7 +46,7 @@ def get_current_version():
 
 def get_dirs_to_process(schema_dir, current_version, target_version):
 
-    if not os.path.exists(path_join(schema_dir, 'v' + target_version)):
+    if target_version != '999.999.9999.999' and not os.path.exists(path_join(schema_dir, 'v' + target_version)):
         logging.info('  .... No target version directory exists %s ' % path_join(schema_dir, target_version))
         logging.info('    ')
         global success
@@ -66,7 +61,7 @@ def get_dirs_to_process(schema_dir, current_version, target_version):
     dir_to_process = {}
     for item in sorted(filtered):
         item_ver = item.replace('v', '').strip(' ')
-
+#
         if config.is_rerun_the_installed_version and current_version == target_version == item_ver:
             dir_to_process[item_ver] = path_join(schema_dir, item)
             break
@@ -113,6 +108,82 @@ def execute_file(dir,file):
 
     return vert.execute(sql)
 
+def is_alter_table_add_column(sql):
+
+
+    r_dot = re.compile('alter table (?P<sname>[a-zA-Z0-9_]+)\.(?P<tname>[a-zA-Z0-9_]+) '
+                       'ADD COLUMN (?P<cname>[a-zA-Z0-9_]+) .+', re.IGNORECASE)
+
+    r_no_dot = re.compile('alter table (?P<tname>[a-zA-Z0-9_]+) '
+                          'ADD COLUMN (?P<cname>[a-zA-Z0-9_]+) .+', re.IGNORECASE)
+    match_dot = r_dot.search(sql)
+    match_no_dot = r_no_dot.search(sql)
+    if match_dot:
+        sname = match_dot.group('sname')
+        tname = match_dot.group('tname')
+        cname = match_dot.group('cname')
+    elif match_no_dot:
+        sname = config.default_schema
+        tname = match_no_dot.group('tname')
+        cname = match_no_dot.group('cname')
+    else:
+        return False, '', '', ''
+
+    return True, sname, tname, cname
+
+
+def is_alter_table_drop_column(sql):
+
+
+    r_dot = re.compile('alter table (?P<sname>[a-zA-Z0-9_]+)\.(?P<tname>[a-zA-Z0-9_]+) '
+                       'DROP COLUMN (?P<cname>[a-zA-Z0-9_]+).*', re.IGNORECASE)
+
+    r_no_dot = re.compile('alter table (?P<tname>[a-zA-Z0-9_]+) '
+                          'DROP COLUMN (?P<cname>[a-zA-Z0-9_]+).*', re.IGNORECASE)
+    match_dot = r_dot.search(sql)
+    match_no_dot = r_no_dot.search(sql)
+    if match_dot:
+        sname = match_dot.group('sname')
+        tname = match_dot.group('tname')
+        cname = match_dot.group('cname')
+    elif match_no_dot:
+        sname = config.default_schema
+        tname = match_no_dot.group('tname')
+        cname = match_no_dot.group('cname')
+    else:
+        return False, '', '', ''
+
+    return True, sname, tname, cname
+
+
+def is_alter_table_rename_column(sql):
+
+    #replace multiply blank to one
+    sql = ' '.join(sql.split())
+
+# RENAME [ COLUMN ] column TO new-column
+    r_dot = re.compile('alter table (?P<sname>[a-zA-Z0-9_]+)\.(?P<tname>[a-zA-Z0-9_]+) '
+                       'RENAME (COLUMN|[ ]*)(?P<old_cname>[a-zA-Z0-9_]+) TO (?P<new_cname>[a-zA-Z0-9_]+)', re.IGNORECASE)
+
+    r_no_dot = re.compile('alter table (?P<tname>[a-zA-Z0-9_]+) '
+                       'RENAME (COLUMN|[ ]*)(?P<old_cname>[a-zA-Z0-9_]+) TO (?P<new_cname>[a-zA-Z0-9_]+).*', re.IGNORECASE)
+    match_dot = r_dot.search(sql)
+    match_no_dot = r_no_dot.search(sql)
+    if match_dot:
+        sname = match_dot.group('sname')
+        tname = match_dot.group('tname')
+        old_cname = match_dot.group('old_cname')
+        new_cname = match_dot.group('old_cname')
+    elif match_no_dot:
+        sname = config.default_schema
+        tname = match_no_dot.group('tname')
+        old_cname = match_dot.group('old_cname')
+        new_cname = match_dot.group('old_cname')
+    else:
+        return False, '', '', '', ''
+
+    return True, sname, tname, old_cname, new_cname
+
 
 def execute_misc_file(file):
 
@@ -128,13 +199,19 @@ def execute_misc_file(file):
     pattern_schema = re.compile(' *create * schema * ', re.IGNORECASE)
     for sql in sqls:
         if len(sql.replace(' ', '')) > 5:
+            # replace multiply blank to one
+            #sql = ' '.join(sql.split(' '))
             sql = sql.strip(' \t\n\r')
             sql = sql.replace('\r', ' ')
+
+
             sql_command = ' '
             for sql_c in sql.split('\n'):
-                if sql_c.startswith('--'):
+                if sql_c.startswith('--') or sql.strip(' ') == '':
                     continue
                 sql_command = sql_command + sql_c + ' '
+            if sql_command.strip(' ') == '':
+                continue
             sql = sql_command
             #print 'SQL IS: %s' %sql
             if re.match(pattern_user, sql) and vert.has_user(sql.split()[2]):
@@ -152,13 +229,27 @@ def execute_misc_file(file):
                 logging.info(' Projection  %s exists' % sql.split()[2].split('.')[-1])
                 continue
 
+            is_alter, sname, tname, cname = is_alter_table_add_column(sql)
+            if is_alter:
+                logging.info(' Column %s in table %s exists' % (cname,tname))
+                continue
+
+            is_alter, sname, tname, cname = is_alter_table_drop_column(sql)
+            if is_alter:
+                logging.info(' Column %s in table %s has already dropped' % (cname,tname))
+                continue
+            is_alter, sname, tname, old_name, new_cname = is_alter_table_rename_column(sql)
+            if is_alter:
+                logging.info(' Column %s in table %s has already renamed to %s' % (old_name, tname, new_cname))
+                continue
+
             res = vert.execute(sql)
             if res[0] == -1:
                 global success
                 success = False
                 if config.stop_after_first_exception:
                     logging.info(' ')
-                    logging.info(' ----> Exit after first exception <-------')
+                    logging.error(' ----> Exit after first exception <-------')
                     sys.exit(1)
 
 
@@ -256,12 +347,46 @@ if __name__ == '__main__':
     #     withdrop = True
     # else:
     withdrop = False
-
+    root = os.path.dirname(os.path.realpath(sys.argv[0]))
+    default_log_dir = os.path.join(root, 'logs/')
+    log_dir = os.getenv('OT_LOGDIR', default_log_dir)
+    log_name = 'VerticaSchemaInstall.log'
+    log_file = os.path.join(log_dir, log_name)
+    if not os.path.exists(os.path.dirname(log_file)):
+        os.makedirs(os.path.dirname(log_file))
     log_format = '%(asctime)s %(levelname)-8s %(message)s'
-    logging.basicConfig(level=logging.DEBUG, format=log_format, filename=config.log_file, filemode='a')
+    #log_file = ''
+    logging.basicConfig(level=logging.DEBUG, format=log_format, filename=log_file, filemode='a')
+
+
+    log_to_stder = logging.getLogger()
+    h_err = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(asctime)s - ERROR - %(levelname)s - %(message)s')
+
+    h_err.setFormatter(formatter)
+    log_to_stder.addHandler(h_err)
+    h_err.setLevel(logging.ERROR)
+
+    # log_screen = logging.getLogger('Screen')
+    # h_screen = logging.StreamHandler(sys.stdout)
+    # log_screen.addHandler(h_screen)
+    # log_screen.setLevel(logging.DEBUG)
+    log_screen = logging.getLogger()
+    log_screen.setLevel(logging.DEBUG)
+
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - DEBUG - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    log_screen.addHandler(ch)
+
+
+
     # logging.info('Arguments: %s' %args)
     vert = Vertica()
     sid = vert.execute('select current_session()')
+    logging.info('  .... ')
+    logging.info('  .... Starting Vertica schema installation')
     logging.info('  .... created new connection [session_id: %s]', sid[1][0][0])
     version,install_time = get_current_version()[1][0]
     vertica_version = vert.execute('select version()')[1][0][0]
@@ -269,30 +394,37 @@ if __name__ == '__main__':
     logging.info('  .... Optimal current version is %s ; installed %s ' % (version,install_time))
     logging.info('    ')
     target_version = config.version.strip(' ')
+
     if comp_versions(version.strip(' '), target_version):
         schema_dir = config.schema_dir
         dirs = get_dirs_to_process(schema_dir, version.strip(' '), target_version)
         if dirs == {}:
-            sys.exit(1)
+            logging.info('The last version %s has already installed ' % version)
+            logging.info('  .... exiting  ')
+            sys.exit(0)
 
         vert.set_default_schema(config.default_schema)
         ksafety = get_ksafety()
-        for ver, dir in sorted(dirs.iteritems()):
-            logging.info('  .... Processing version %s from %s ' % (ver, dir))
+    ### Processing all versions
+        for ver, ver_dir in sorted(dirs.iteritems()):
+            logging.info('  .... Processing version %s from %s ' % (ver, ver_dir))
             logging.info('    ')
             files_to_process = []
-            files = get_files_to_process(dir,'sql')
-
+            files = get_files_to_process(ver_dir, 'sql')
+    ### Processing all files in version ver
             for file in sorted(files):
                 # execute files
                 logging.info('  ........ Processing file %s  ' % file)
                 logging.info(' ')
                 execute_misc_file(file)
-        if success:
-            write_version(target_version,  config.description)
+            if success:
+                write_version(ver,  '')
+    if not success:
+        logging.error('  .... exiting  ')
+        sys.exit(1)
     else:
         logging.info('  .... installed version %s is greater than %s ' % (version, target_version))
-        logging.info('    ')
+        logging.info('  .... exiting  ')
 
 
 
