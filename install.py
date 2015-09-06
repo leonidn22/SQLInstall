@@ -391,7 +391,7 @@ if __name__ == '__main__':
     version,install_time = get_current_version()[1][0]
     vertica_version = vert.execute('select version()')[1][0][0]
     logging.info('  .... Vertica version is %s  ' % vertica_version)
-    logging.info('  .... Optimal current version is %s ; installed %s ' % (version,install_time))
+    logging.info('  .... Current version is %s ; installed %s ' % (version,install_time))
     logging.info('    ')
     target_version = config.version.strip(' ')
 
