@@ -7,7 +7,7 @@ description = 'The  version'
 is_rerun_the_installed_version = True
 
 # default_schema will be created if not exists
-default_schema = 'optimal2'
+default_schema = 'def'
 root = '/home/dbadmin/'
 schema_dir = '/home/dbadmin/schema/Vertica'
 
